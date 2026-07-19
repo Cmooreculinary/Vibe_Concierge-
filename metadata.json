@@ -1,0 +1,6 @@
+{
+  "name": "Vibe - Group Meetups & Dating",
+  "description": "A high-end, responsive social networking application to plan elegant group outings, find dates, coordinate group activities, and interact with live simulated matches via AI Wingman integration.",
+  "requestFramePermissions": ["geolocation", "camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

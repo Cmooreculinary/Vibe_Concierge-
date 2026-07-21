@@ -5,6 +5,7 @@ interface PrivacyToggleProps {
   description: string;
   enabled: boolean;
   onChange: (enabled: boolean) => void;
+  compact?: boolean;
 }
 
 export default function PrivacyToggle({
@@ -12,12 +13,13 @@ export default function PrivacyToggle({
   description,
   enabled,
   onChange,
+  compact = false,
 }: PrivacyToggleProps) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-neutral-800 bg-neutral-950/70 p-3.5">
+    <div className={`flex items-center justify-between gap-4 rounded-xl border border-neutral-800 bg-neutral-950/70 ${compact ? "p-2.5" : "p-3.5"}`}>
       <div className="min-w-0 space-y-0.5">
         <p className="text-xs font-semibold text-neutral-100">{label}</p>
-        <p className="text-[10px] leading-relaxed text-neutral-500">{description}</p>
+        <p className={`${compact ? "text-[9px]" : "text-[10px]"} leading-relaxed text-neutral-500`}>{description}</p>
       </div>
       <button
         type="button"

@@ -14,6 +14,20 @@ export interface UserProfile {
   rsvpedMeetups: string[];
 }
 
+export type WorkspaceTab = 'dusk' | 'roundtable' | 'chats' | 'profile';
+
+export interface PrivacySettings {
+  profileDiscoverable: boolean;
+  shareLocation: boolean;
+  showOnlineStatus: boolean;
+  allowDirectMessages: boolean;
+  allowMeetupInvites: boolean;
+  shareProfileInCrews: boolean;
+  aiPersonalization: boolean;
+}
+
+export type PrivacySettingKey = keyof PrivacySettings;
+
 export interface MatchProfile {
   id: string;
   name: string;

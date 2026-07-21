@@ -22,15 +22,44 @@ import {
   Bookmark,
   Share2,
   Grid,
-  BarChart3
+  BarChart3,
+  ShieldCheck,
+  LockKeyhole,
+  Radio,
+  Settings2,
 } from "lucide-react";
-import { DEFAULT_USER, INITIAL_MATCHES, INITIAL_GROUPS, INITIAL_MEETUPS } from "./data";
-import { UserProfile, MatchProfile, Group, MeetupEvent, ChatMessage } from "./types";
+import { DEFAULT_PRIVACY_SETTINGS, DEFAULT_USER, INITIAL_MATCHES, INITIAL_GROUPS, INITIAL_MEETUPS } from "./data";
+import { UserProfile, MatchProfile, Group, MeetupEvent, ChatMessage, PrivacySettingKey, PrivacySettings, WorkspaceTab } from "./types";
 import AIWingmanPanel from "./components/AIWingmanPanel";
 import MeetupCountdown from "./components/MeetupCountdown";
 import MeetupCalendarView from "./components/MeetupCalendarView";
 import MapPreviewModal from "./components/MapPreviewModal";
 import InviteFriendsModal from "./components/InviteFriendsModal";
+import PrivacyToggle from "./components/PrivacyToggle";
+
+const loadPrivacySettings = (): PrivacySettings => {
+  const saved = localStorage.getItem("vibe_privacy_settings");
+  if (!saved) return DEFAULT_PRIVACY_SETTINGS;
+
+  try {
+    const parsed = JSON.parse(saved) as Partial<PrivacySettings>;
+    const readBoolean = (key: PrivacySettingKey) =>
+      typeof parsed[key] === "boolean" ? parsed[key] : DEFAULT_PRIVACY_SETTINGS[key];
+
+    return {
+      profileDiscoverable: readBoolean("profileDiscoverable"),
+      shareLocation: readBoolean("shareLocation"),
+      showOnlineStatus: readBoolean("showOnlineStatus"),
+      allowDirectMessages: readBoolean("allowDirectMessages"),
+      allowMeetupInvites: readBoolean("allowMeetupInvites"),
+      shareProfileInCrews: readBoolean("shareProfileInCrews"),
+      aiPersonalization: readBoolean("aiPersonalization"),
+    };
+  } catch (error) {
+    console.error("Unable to read privacy settings", error);
+    return DEFAULT_PRIVACY_SETTINGS;
+  }
+};
 
 export default function App() {
   // --- Persistent LocalState ---
@@ -66,6 +95,8 @@ export default function App() {
     return INITIAL_MEETUPS;
   });
 
+  const [privacySettings, setPrivacySettings] = useState<PrivacySettings>(loadPrivacySettings);
+
   // Sync to localStorage
   useEffect(() => {
     localStorage.setItem("vibe_user_profile", JSON.stringify(userProfile));
@@ -83,21 +114,58 @@ export default function App() {
     localStorage.setItem("vibe_meetups", JSON.stringify(meetups));
   }, [meetups]);
 
+  useEffect(() => {
+    localStorage.setItem("vibe_privacy_settings", JSON.stringify(privacySettings));
+  }, [privacySettings]);
+
   // --- UI / Onboarding & Navigation States ---
   const [onboarded, setOnboarded] = useState<boolean>(() => {
     return localStorage.getItem("vibe_onboarded") === "true";
   });
   const [onboardName, setOnboardName] = useState("");
   const [onboardEmail, setOnboardEmail] = useState("");
+  const [currentTab, setCurrentTab] = useState<WorkspaceTab>(() => {
+    const savedDestination = localStorage.getItem("vibe_last_workspace");
+    return savedDestination === "roundtable" || savedDestination === "chats" || savedDestination === "profile"
+      ? savedDestination
+      : "dusk";
+  });
+
+  const navigateToWorkspace = (destination: WorkspaceTab) => {
+    localStorage.setItem("vibe_last_workspace", destination);
+    setCurrentTab(destination);
+  };
 
   const handleOnboardSubmit = (name: string, email: string) => {
-    setUserProfile(prev => ({ ...prev, name: name || "Elite Explorer" }));
+    setUserProfile(prev => ({ ...prev, name: name.trim() }));
     localStorage.setItem("vibe_onboarded", "true");
-    localStorage.setItem("vibe_onboard_email", email);
+    localStorage.removeItem("vibe_onboard_email");
+    sessionStorage.setItem("vibe_onboard_email", email.trim());
+    localStorage.setItem("vibe_entry_mode", "member");
     setOnboarded(true);
   };
 
-  const [currentTab, setCurrentTab] = useState<"dusk" | "roundtable" | "chats" | "profile">("dusk");
+  const handleDirectEntry = (destination: WorkspaceTab) => {
+    setUserProfile(prev => ({
+      ...prev,
+      name: prev.name === DEFAULT_USER.name ? "Guest Explorer" : prev.name,
+    }));
+    localStorage.setItem("vibe_onboarded", "true");
+    localStorage.setItem("vibe_entry_mode", "guest");
+    localStorage.removeItem("vibe_onboard_email");
+    sessionStorage.removeItem("vibe_onboard_email");
+    navigateToWorkspace(destination);
+    setOnboarded(true);
+  };
+
+  const updatePrivacySetting = (setting: PrivacySettingKey, enabled: boolean) => {
+    setPrivacySettings(prev => ({ ...prev, [setting]: enabled }));
+  };
+
+  const returnToGateway = () => {
+    localStorage.removeItem("vibe_onboarded");
+    setOnboarded(false);
+  };
   const [roundtableSubTab, setRoundtableSubTab] = useState<"crews" | "outings">("crews");
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [mapZoom, setMapZoom] = useState<number>(1.0);
@@ -224,7 +292,9 @@ export default function App() {
         id: `wel-${Date.now()}`,
         senderId: "system",
         senderName: "Vibe Butler",
-        text: `${userProfile.name} is now representing inside the crew! Give them a warm welcome. 👋`,
+        text: privacySettings.shareProfileInCrews
+          ? `${userProfile.name} is now representing inside the crew! Give them a warm welcome. 👋`
+          : "A private member joined the crew. Give them a warm welcome. 👋",
         timestamp: "Just now",
       };
       setGroups(prev =>
@@ -368,10 +438,10 @@ export default function App() {
       type: newEvent.type,
       category: newEvent.category,
       image: newEvent.image || "https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=500&q=80",
-      organizerName: userProfile.name,
       organizerId: "user",
       attendeesCount: 1,
-      attendeeAvatars: [userProfile.avatar],
+      organizerName: privacySettings.shareProfileInCrews ? userProfile.name : "Private host",
+      attendeeAvatars: privacySettings.shareProfileInCrews ? [userProfile.avatar] : [],
       joined: true,
     };
 
@@ -731,13 +801,13 @@ export default function App() {
 
   if (!onboarded) {
     return (
-      <div className="min-h-screen bg-[#070707] text-neutral-100 flex flex-col items-center justify-center font-sans relative overflow-hidden px-4 md:px-6 animate-fade-in">
+      <div className="min-h-screen bg-[#070707] text-neutral-100 flex flex-col items-center justify-center font-sans relative overflow-x-hidden overflow-y-auto px-4 py-8 pb-16 md:px-6 animate-fade-in">
         {/* Glow decoration */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-orange-650/10 rounded-full blur-[120px] pointer-events-none"></div>
         <div className="absolute bottom-1/4 left-1/3 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-red-650/5 rounded-full blur-[100px] pointer-events-none"></div>
 
         {/* Landing Card */}
-        <div className="max-w-md w-full smoked-glass border border-neutral-800 rounded-3xl p-8 md:p-10 shadow-2xl relative z-10 space-y-8 text-center">
+        <div className="max-w-lg w-full smoked-glass border border-neutral-800 rounded-3xl p-7 md:p-9 shadow-2xl relative z-10 space-y-7 text-center">
           <div className="space-y-3">
             <div className="mx-auto w-14 h-14 rounded-2xl bg-orange-600 flex items-center justify-center font-black text-2xl text-white tracking-widest shadow-xl shadow-orange-950/20">
               V
@@ -802,6 +872,7 @@ export default function App() {
                 onChange={(e) => setOnboardEmail(e.target.value)}
                 className="w-full bg-neutral-950/80 border border-neutral-850 focus:border-orange-500/60 rounded-xl px-4 py-3 text-xs text-white placeholder-neutral-500 outline-none transition-all font-sans"
               />
+              <p className="pl-1 text-[9px] text-neutral-600">Kept only for this browser session.</p>
             </div>
 
             <div className="pt-2 space-y-3">
@@ -814,22 +885,56 @@ export default function App() {
                 <ChevronRight className="w-4 h-4" />
               </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  handleOnboardSubmit("Elite Explorer", "explorer@vibe.social");
-                }}
-                className="w-full py-3 bg-neutral-950 hover:bg-neutral-900 text-neutral-300 hover:text-white rounded-xl text-xs font-bold transition-colors border border-neutral-850 cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <span>Instant Direct Entry (Skip)</span>
-              </button>
             </div>
           </form>
+
+          <div className="border-t border-neutral-800 pt-5 space-y-3 text-left">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-neutral-100">Skip setup</p>
+                <p className="text-[10px] text-neutral-500">No name or email required. Choose where to land.</p>
+              </div>
+              <ShieldCheck className="h-5 w-5 shrink-0 text-emerald-400" />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleDirectEntry("dusk")}
+              className="w-full py-3 bg-neutral-950 hover:bg-neutral-900 text-neutral-200 hover:text-white rounded-xl text-xs font-bold transition-colors border border-neutral-800 cursor-pointer flex items-center justify-between px-4"
+            >
+              <span>Enter Vibe Concierge now</span>
+              <ArrowRight className="h-4 w-4 text-orange-400" />
+            </button>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleDirectEntry("dusk")}
+                className="rounded-xl border border-neutral-800 bg-neutral-950/70 p-3 text-left transition-colors hover:border-orange-500/40 hover:bg-neutral-900"
+              >
+                <span className="block text-[10px] font-black tracking-widest text-orange-400">DUSK</span>
+                <span className="mt-1 block text-[10px] text-neutral-500">Open match radar</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDirectEntry("roundtable")}
+                className="rounded-xl border border-neutral-800 bg-neutral-950/70 p-3 text-left transition-colors hover:border-orange-500/40 hover:bg-neutral-900"
+              >
+                <span className="block text-[10px] font-black tracking-widest text-orange-400">ROUNDTABLE</span>
+                <span className="mt-1 block text-[10px] text-neutral-500">Open crews & outings</span>
+              </button>
+            </div>
+
+            <p className="flex items-center gap-1.5 text-[9px] leading-relaxed text-neutral-600">
+              <LockKeyhole className="h-3 w-3 shrink-0" />
+              Guest entry uses balanced local defaults. Change every control from My Profile.
+            </p>
+          </div>
         </div>
 
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-center">
           <p className="text-[9px] text-neutral-600 font-mono">
-            VIBE SOCIAL SYSTEM v4.2 // SECURITY TUNNEL ESTABLISHED
+            VIBE SOCIAL SYSTEM v4.2 // LOCAL PRIVACY CONTROLS READY
           </p>
         </div>
       </div>
@@ -846,8 +951,13 @@ export default function App() {
             <div className="w-10 h-10 rounded-xl bg-orange-600 flex items-center justify-center font-bold tracking-widest text-[#f8fafc] font-display text-lg shadow-lg shadow-orange-550/25">
               V
             </div>
-            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-neutral-900 flex items-center justify-center">
-              <span className="block w-1.5 h-1.5 bg-white rounded-full animate-ping"></span>
+            <div
+              className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-neutral-900 flex items-center justify-center ${
+                privacySettings.showOnlineStatus ? "bg-emerald-500" : "bg-neutral-600"
+              }`}
+              title={privacySettings.showOnlineStatus ? "Online status visible" : "Online status hidden"}
+            >
+              <span className={`block w-1.5 h-1.5 bg-white rounded-full ${privacySettings.showOnlineStatus ? "animate-ping" : "opacity-60"}`}></span>
             </div>
           </div>
           <div>
@@ -879,7 +989,7 @@ export default function App() {
         {/* USER UTILITY PREVIEW */}
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setCurrentTab("profile")}
+            onClick={() => navigateToWorkspace("profile")}
             className="flex items-center gap-2 text-left bg-neutral-950 p-2 rounded-xl border border-neutral-800/80 hover:bg-neutral-900 transition-all cursor-pointer"
           >
             <img
@@ -889,7 +999,9 @@ export default function App() {
             />
             <div className="hidden sm:block">
               <p className="text-xs font-bold text-neutral-100">{userProfile.name}</p>
-              <p className="text-[10px] text-neutral-400 capitalize font-mono">{userProfile.socialMood} state</p>
+              <p className="text-[10px] text-neutral-400 capitalize font-mono">
+                {privacySettings.profileDiscoverable ? `${userProfile.socialMood} state` : "Private profile"}
+              </p>
             </div>
           </button>
         </div>
@@ -898,7 +1010,7 @@ export default function App() {
       {/* MOBILE-ONLY BRAND SWITCH PANEL */}
       <div className="md:hidden bg-[#121212] border-b border-neutral-850 p-2 flex justify-center gap-1.5">
         <button
-          onClick={() => setCurrentTab("dusk")}
+          onClick={() => navigateToWorkspace("dusk")}
           className={`flex-1 py-2 text-center rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 ${
             currentTab === "dusk" ? "bg-orange-600 text-white font-extrabold" : "text-neutral-400"
           }`}
@@ -907,7 +1019,7 @@ export default function App() {
           Dusk
         </button>
         <button
-          onClick={() => setCurrentTab("roundtable")}
+          onClick={() => navigateToWorkspace("roundtable")}
           className={`flex-1 py-2 text-center rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 ${
             currentTab === "roundtable" ? "bg-orange-600 text-white font-extrabold" : "text-neutral-400"
           }`}
@@ -916,7 +1028,7 @@ export default function App() {
           Roundtable
         </button>
         <button
-          onClick={() => setCurrentTab("chats")}
+          onClick={() => navigateToWorkspace("chats")}
           className={`flex-1 py-2 text-center rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 ${
             currentTab === "chats" ? "bg-orange-600 text-white font-extrabold" : "text-neutral-400"
           }`}
@@ -940,7 +1052,7 @@ export default function App() {
 
             <button
               id="nav-btn-dusk"
-              onClick={() => setCurrentTab("dusk")}
+              onClick={() => navigateToWorkspace("dusk")}
               className={`w-full text-left py-3 px-4 rounded-xl text-sm font-semibold flex items-center justify-between transition-all duration-200 cursor-pointer ${
                 currentTab === "dusk"
                   ? "bg-neutral-800 text-white"
@@ -960,7 +1072,7 @@ export default function App() {
             <button
               id="nav-btn-roundtable"
               onClick={() => {
-                setCurrentTab("roundtable");
+                navigateToWorkspace("roundtable");
               }}
               className={`w-full text-left py-3 px-4 rounded-xl text-sm font-semibold flex items-center justify-between transition-all duration-200 cursor-pointer ${
                 currentTab === "roundtable"
@@ -984,7 +1096,7 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => setCurrentTab("chats")}
+              onClick={() => navigateToWorkspace("chats")}
               className={`w-full text-left py-3 px-4 rounded-xl text-sm font-semibold flex items-center justify-between transition-all duration-200 cursor-pointer ${
                 currentTab === "chats"
                   ? "bg-neutral-800 text-white"
@@ -1002,7 +1114,7 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => setCurrentTab("profile")}
+              onClick={() => navigateToWorkspace("profile")}
               className={`w-full text-left py-3 px-4 rounded-xl text-sm font-semibold flex items-center justify-between transition-all duration-200 cursor-pointer ${
                 currentTab === "profile"
                   ? "bg-neutral-800 text-white"
@@ -1509,7 +1621,7 @@ export default function App() {
                                 className="cursor-pointer"
                                 onClick={() => {
                                   setRoundtableSubTab("crews");
-                                  setCurrentTab("roundtable");
+                                  navigateToWorkspace("roundtable");
                                   setActiveChatId(g.id); // jump directly to crew chat!
                                 }}
                                 onMouseEnter={() => {
@@ -1769,7 +1881,7 @@ export default function App() {
                                     handleGroupToggleJoin(group.id);
                                   }
                                   setActiveChatId(group.id);
-                                  setCurrentTab("chats");
+                                  navigateToWorkspace("chats");
                                 }}
                                 className="px-3 bg-neutral-950 hover:bg-neutral-850 text-neutral-300 rounded-xl border border-neutral-800/80 transition-colors flex items-center justify-center cursor-pointer"
                                 title="Engage Crew Chat"
@@ -2144,10 +2256,14 @@ export default function App() {
 
                         <button
                           onClick={() => setShowWingmanSidebar(prev => !prev)}
-                          className={`text-xs px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1 transition-all cursor-pointer ${
-                            showWingmanSidebar
+                          disabled={!privacySettings.aiPersonalization}
+                          title={privacySettings.aiPersonalization ? "Toggle AI advice" : "Enable AI personalization in My Profile"}
+                          className={`text-xs px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1 transition-all ${
+                            !privacySettings.aiPersonalization
+                              ? "bg-neutral-950 text-neutral-600 border border-neutral-850 cursor-not-allowed"
+                              : showWingmanSidebar
                               ? "bg-orange-950/20 text-orange-400 border border-orange-900/40"
-                              : "bg-neutral-950 hover:bg-neutral-900 text-neutral-400"
+                              : "bg-neutral-950 hover:bg-neutral-900 text-neutral-400 cursor-pointer"
                           }`}
                         >
                           <Sparkles className="w-3.5 h-3.5 text-orange-400" />
@@ -2345,7 +2461,7 @@ export default function App() {
                 </div>
 
                 {/* AI WINGMAN SIDEBAR WRAP */}
-                {showWingmanSidebar && activeChatMetadata && (
+                {privacySettings.aiPersonalization && showWingmanSidebar && activeChatMetadata && (
                   <div className="w-full lg:w-72 shrink-0">
                     <AIWingmanPanel
                       targetId={activeChatMetadata.id}
@@ -2374,8 +2490,10 @@ export default function App() {
                   className="w-20 h-20 rounded-2xl object-cover ring-4 ring-neutral-800 shadow"
                 />
                 <div className="text-center sm:text-left space-y-1">
-                  <h2 className="text-xl font-bold text-white font-display">{userProfile.name}, 27</h2>
-                  <p className="text-xs text-neutral-400 font-mono">Location: {userProfile.location}</p>
+                  <h2 className="text-xl font-bold text-white font-display">{userProfile.name}, {userProfile.age}</h2>
+                  <p className="text-xs text-neutral-400 font-mono">
+                    Location: {userProfile.location} • {privacySettings.shareLocation ? "visible" : "hidden from members"}
+                  </p>
                   
                   {/* Status pills selector */}
                   <div className="flex flex-wrap gap-1.5 justify-center sm:justify-start pt-1">
@@ -2452,6 +2570,106 @@ export default function App() {
                   </div>
                 </div>
 
+              </div>
+
+              {/* PRIVACY, SECURITY & INTERACTION CONTROLS */}
+              <div className="space-y-4 border-t border-neutral-800/80 pt-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="h-5 w-5 text-orange-400" />
+                      <h3 className="font-display text-lg font-bold text-white">Privacy & Interaction</h3>
+                    </div>
+                    <p className="max-w-2xl text-[11px] leading-relaxed text-neutral-500">
+                      Choose what other members can see, how they can reach you, and whether AI may use your profile for suggestions.
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 self-start rounded-lg border border-emerald-900/50 bg-emerald-950/20 px-2.5 py-1 text-[9px] font-mono text-emerald-400 sm:self-auto">
+                    <LockKeyhole className="h-3 w-3" /> Saved on this device
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                  <section className="space-y-2 rounded-2xl border border-neutral-800/80 bg-neutral-950/30 p-3">
+                    <div className="flex items-center gap-2 px-1 pb-1">
+                      <LockKeyhole className="h-4 w-4 text-orange-400" />
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-neutral-300">Security</h4>
+                    </div>
+                    <PrivacyToggle
+                      label="Discoverable profile"
+                      description="Allow your profile to appear in member discovery."
+                      enabled={privacySettings.profileDiscoverable}
+                      onChange={enabled => updatePrivacySetting("profileDiscoverable", enabled)}
+                    />
+                    <PrivacyToggle
+                      label="Share profile location"
+                      description="Show your profile location to other members."
+                      enabled={privacySettings.shareLocation}
+                      onChange={enabled => updatePrivacySetting("shareLocation", enabled)}
+                    />
+                    <PrivacyToggle
+                      label="AI personalization"
+                      description="Let AI advice use your profile and conversation context."
+                      enabled={privacySettings.aiPersonalization}
+                      onChange={enabled => updatePrivacySetting("aiPersonalization", enabled)}
+                    />
+                  </section>
+
+                  <section className="space-y-2 rounded-2xl border border-neutral-800/80 bg-neutral-950/30 p-3">
+                    <div className="flex items-center gap-2 px-1 pb-1">
+                      <Radio className="h-4 w-4 text-orange-400" />
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-neutral-300">Sharing</h4>
+                    </div>
+                    <PrivacyToggle
+                      label="Online activity"
+                      description="Show when you are active inside Vibe."
+                      enabled={privacySettings.showOnlineStatus}
+                      onChange={enabled => updatePrivacySetting("showOnlineStatus", enabled)}
+                    />
+                    <PrivacyToggle
+                      label="Crew profile sharing"
+                      description="Use your name and avatar in crew joins and hosted outings."
+                      enabled={privacySettings.shareProfileInCrews}
+                      onChange={enabled => updatePrivacySetting("shareProfileInCrews", enabled)}
+                    />
+                  </section>
+
+                  <section className="space-y-2 rounded-2xl border border-neutral-800/80 bg-neutral-950/30 p-3">
+                    <div className="flex items-center gap-2 px-1 pb-1">
+                      <Settings2 className="h-4 w-4 text-orange-400" />
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-neutral-300">Interaction</h4>
+                    </div>
+                    <PrivacyToggle
+                      label="Direct messages"
+                      description="Allow matched members to start a direct conversation."
+                      enabled={privacySettings.allowDirectMessages}
+                      onChange={enabled => updatePrivacySetting("allowDirectMessages", enabled)}
+                    />
+                    <PrivacyToggle
+                      label="Meetup invitations"
+                      description="Allow members and crews to send you outing invitations."
+                      enabled={privacySettings.allowMeetupInvites}
+                      onChange={enabled => updatePrivacySetting("allowMeetupInvites", enabled)}
+                    />
+                  </section>
+                </div>
+
+                <div className="flex flex-col gap-2 border-t border-neutral-800/60 pt-4 sm:flex-row sm:justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setPrivacySettings(DEFAULT_PRIVACY_SETTINGS)}
+                    className="rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-2 text-[10px] font-bold text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-white"
+                  >
+                    Restore balanced defaults
+                  </button>
+                  <button
+                    type="button"
+                    onClick={returnToGateway}
+                    className="rounded-xl border border-orange-900/50 bg-orange-950/10 px-4 py-2 text-[10px] font-bold text-orange-300 transition-colors hover:bg-orange-950/30"
+                  >
+                    Return to entry gateway
+                  </button>
+                </div>
               </div>
 
               {/* INTEREST CHECKBOXES CHIPS */}
@@ -2536,7 +2754,7 @@ export default function App() {
                 id="btn-matchoverlay-gotochat"
                 onClick={() => {
                   setActiveChatId(showMatchOverlay.id);
-                  setCurrentTab("chats");
+                  navigateToWorkspace("chats");
                   setShowMatchOverlay(null);
                 }}
                 className="w-full py-3 bg-gradient-to-r from-orange-600 to-orange-500 text-white font-display font-bold rounded-2xl shadow-lg hover:shadow-orange-500/30 cursor-pointer"

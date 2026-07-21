@@ -1,4 +1,14 @@
-import { UserProfile, MatchProfile, Group, MeetupEvent } from "./types";
+import { UserProfile, MatchProfile, Group, MeetupEvent, PrivacySettings } from "./types";
+
+export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
+  profileDiscoverable: true,
+  shareLocation: false,
+  showOnlineStatus: false,
+  allowDirectMessages: true,
+  allowMeetupInvites: true,
+  shareProfileInCrews: true,
+  aiPersonalization: false,
+};
 
 export const DEFAULT_USER: UserProfile = {
   name: "Alex Moore",

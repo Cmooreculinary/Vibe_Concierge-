@@ -74,6 +74,7 @@ export interface MeetupEvent {
   date: string;
   time: string;
   location: string;
+  venueType: 'public' | 'unverified';
   type: 'outing' | 'date' | 'group' | 'party';
   category: string;
   image: string;

@@ -12,15 +12,9 @@ import {
   ChevronRight,
   Send,
   X,
-  Info,
   Compass,
   ArrowRight,
-  Smile,
-  Sliders,
   ChevronDown,
-  Trash2,
-  Bookmark,
-  Share2,
   Grid,
   BarChart3,
   ShieldCheck,
@@ -91,7 +85,13 @@ export default function App() {
   const [meetups, setMeetups] = useState<MeetupEvent[]>(() => {
     const saved = localStorage.getItem("vibe_meetups");
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        const parsed = JSON.parse(saved) as MeetupEvent[];
+        return parsed.map(meetup => ({
+          ...meetup,
+          venueType: meetup.venueType === "public" ? "public" : "unverified",
+        }));
+      } catch (e) { console.error(e); }
     }
     return INITIAL_MEETUPS;
   });
@@ -170,10 +170,6 @@ export default function App() {
   };
   const [roundtableSubTab, setRoundtableSubTab] = useState<"crews" | "outings">("crews");
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
-  const [mapZoom, setMapZoom] = useState<number>(1.0);
-  const [searchRadius, setSearchRadius] = useState<number>(5.0);
-  const [mapFilter, setMapFilter] = useState<"all" | "matches" | "crews">("all");
-  const [hoveredNode, setHoveredNode] = useState<{ id: string; name: string; type: "match" | "crew"; x: number; y: number; detail?: string } | null>(null);
   const [activeChatId, setActiveChatId] = useState<string>("p-1"); // Elena chat default
   const [chatInput, setChatInput] = useState("");
   const [typingStates, setTypingStates] = useState<Record<string, boolean>>({});
@@ -204,6 +200,7 @@ export default function App() {
     category: "adventure",
     type: "group" as "group" | "date" | "outing" | "party",
     image: "",
+    publicVenueConfirmed: false,
   });
 
   // Keep chat scrolled down
@@ -428,7 +425,7 @@ export default function App() {
   // --- Host Custom Event ---
   const handleCreateEvent = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEvent.title || !newEvent.location) return;
+    if (!newEvent.title || !newEvent.location || !newEvent.publicVenueConfirmed) return;
 
     const createdEvent: MeetupEvent = {
       id: `m-custom-${Date.now()}`,
@@ -437,6 +434,7 @@ export default function App() {
       date: newEvent.date,
       time: newEvent.time,
       location: newEvent.location,
+      venueType: "public",
       type: newEvent.type,
       category: newEvent.category,
       image: newEvent.image || "https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=500&q=80",
@@ -474,6 +472,7 @@ export default function App() {
       category: "adventure",
       type: "group",
       image: "",
+      publicVenueConfirmed: false,
     });
     setShowFormModal(false);
   };
@@ -775,7 +774,7 @@ export default function App() {
             interests: matchProfile.mutualInterests,
             mood: matchProfile.socialMood,
             avatar: matchProfile.image,
-            location: matchProfile.location,
+            location: "Exact location protected",
             score: matchProfile.compatibilityScore,
             history: matchProfile.chatHistory,
           }
@@ -939,7 +938,7 @@ export default function App() {
               <p className="px-1 text-[9px] leading-relaxed text-neutral-500">Set these before entering. Every switch is saved on this device and remains available in My Profile.</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 <PrivacyToggle compact label="Discoverable profile" description="Appear in member discovery." enabled={privacySettings.profileDiscoverable} onChange={enabled => updatePrivacySetting("profileDiscoverable", enabled)} />
-                <PrivacyToggle compact label="Share profile location" description="Show your profile location." enabled={privacySettings.shareLocation} onChange={enabled => updatePrivacySetting("shareLocation", enabled)} />
+                <PrivacyToggle compact label="Public meetup venue maps" description="Only confirmed public places with 2+ attendees." enabled={privacySettings.shareLocation} onChange={enabled => updatePrivacySetting("shareLocation", enabled)} />
                 <PrivacyToggle compact label="Online activity" description="Show when you are active." enabled={privacySettings.showOnlineStatus} onChange={enabled => updatePrivacySetting("showOnlineStatus", enabled)} />
                 <PrivacyToggle compact label="Direct messages" description="Let matches start conversations." enabled={privacySettings.allowDirectMessages} onChange={enabled => updatePrivacySetting("allowDirectMessages", enabled)} />
                 <PrivacyToggle compact label="Meetup invitations" description="Receive member and crew invites." enabled={privacySettings.allowMeetupInvites} onChange={enabled => updatePrivacySetting("allowMeetupInvites", enabled)} />
@@ -1100,8 +1099,8 @@ export default function App() {
               <div className="flex items-center gap-2.5">
                 <MapPin className={`w-4 h-4 ${currentTab === "dusk" ? "text-orange-400" : "text-neutral-400"}`} />
                 <div className="flex flex-col">
-                  <span className="font-bold">Dusk (Location)</span>
-                  <span className="text-[10px] text-neutral-400 font-normal">Direct Matches & Map</span>
+                  <span className="font-bold">Dusk (Discovery)</span>
+                  <span className="text-[10px] text-neutral-400 font-normal">Matches without live locations</span>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 opacity-55" />
@@ -1235,10 +1234,10 @@ export default function App() {
                 <div>
                   <h1 className="text-2xl font-black font-display text-white tracking-tight flex items-center gap-2">
                     <MapPin className="text-orange-500 w-6 h-6 animate-pulse p-0.5 bg-orange-500/10 rounded-lg" />
-                    <span>Dusk Locational Radar</span>
+                    <span>Dusk Connection Discovery</span>
                   </h1>
                   <p className="text-xs text-neutral-400">
-                    Locating and matching high-fidelity singles based on exact real-time distance proximity.
+                    Discover compatible people without exposing anyone's live or pinpoint location.
                   </p>
                 </div>
               </div>
@@ -1272,7 +1271,7 @@ export default function App() {
                         <div className="absolute top-4 left-4 flex flex-wrap gap-1.5">
                           <span className="text-[10px] font-extrabold uppercase font-mono tracking-wider bg-neutral-950/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-neutral-800/80 text-emerald-400 flex items-center gap-1">
                             <MapPin className="w-3 h-3 text-orange-500" />
-                            {activeMatchCard.distance}
+                            Location protected
                           </span>
                           <span className="text-[10px] font-extrabold uppercase font-mono tracking-wider bg-orange-950/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-orange-900/60 text-orange-300">
                             🔥 {activeMatchCard.compatibilityScore}% Compatibility
@@ -1293,7 +1292,7 @@ export default function App() {
 
                         <p className="text-xs text-neutral-400 font-mono flex items-center gap-1.5">
                           <MapPin className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                          {activeMatchCard.location}
+                          Approximate metro area only • exact location hidden
                         </p>
 
                         <p className="text-sm text-neutral-200 leading-relaxed font-sans">
@@ -1360,453 +1359,83 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Right column: Interactive Map */}
+                {/* Right column: public meetup venues only */}
                 <div className="xl:col-span-7 flex flex-col space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <span className="text-[10px] font-mono tracking-widest font-black uppercase text-orange-400 pl-1">
-                      ✦ Dusk Radar (Location targets)
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <span className="pl-1 font-mono text-[10px] font-black uppercase tracking-widest text-orange-400">
+                      ✦ Confirmed Public Meetup Venues
                     </span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-neutral-400 bg-neutral-900 border border-neutral-800 px-2 py-0.5 rounded font-mono">
-                        Alex's Radius: {searchRadius} miles
-                      </span>
-                      <span className="text-[10px] text-neutral-400 bg-neutral-900 border border-neutral-800 px-2 py-0.5 rounded font-mono">
-                        Zoom: {mapZoom.toFixed(1)}x
-                      </span>
-                    </div>
+                    <span className="rounded border border-emerald-900/50 bg-emerald-950/20 px-2 py-1 font-mono text-[9px] text-emerald-400">
+                      NO LIVE PEOPLE PINS
+                    </span>
                   </div>
 
-                  <div className="smoked-glass border border-neutral-800 rounded-3xl overflow-hidden p-4 flex-1 flex flex-col justify-between min-h-[450px] relative">
-                    
-                    {/* Map Header / Dashboard Controls */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 pb-3 border-b border-neutral-900 z-10">
-                      <div className="space-y-0.5">
-                        <h4 className="text-xs font-bold font-display text-white">Live Vibe Radar Map</h4>
-                        <p className="text-[10px] text-neutral-400 font-mono">Click singles or interest crew nodes to inspect</p>
-                      </div>
-                      
-                      {/* Interactive map controls & filters */}
-                      <div className="flex flex-wrap items-center gap-2">
-                        {/* Map Mode Tabs */}
-                        <div className="flex bg-neutral-950 p-0.5 rounded-lg border border-neutral-800">
-                          {(["all", "matches", "crews"] as const).map(f => (
-                            <button
-                              key={f}
-                              onClick={() => setMapFilter(f)}
-                              className={`px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase transition-colors cursor-pointer ${
-                                mapFilter === f
-                                  ? "bg-orange-600/20 text-orange-400 border border-orange-500/30"
-                                  : "text-neutral-500 hover:text-neutral-300"
-                              }`}
-                            >
-                              {f === "all" ? "All" : f === "matches" ? "Singles" : "Crews"}
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* Search Radius Slider */}
-                        <div className="flex items-center gap-2 bg-neutral-950 px-2.5 py-1 rounded-lg border border-neutral-800 text-[10px] font-mono text-neutral-400">
-                          <Sliders className="w-3 h-3 text-orange-500 shrink-0" />
-                          <span className="shrink-0">Range:</span>
-                          <input
-                            type="range"
-                            min="1.0"
-                            max="10.0"
-                            step="0.5"
-                            value={searchRadius}
-                            onChange={(e) => setSearchRadius(parseFloat(e.target.value))}
-                            className="w-16 accent-orange-500 h-1 bg-neutral-800 rounded-lg cursor-pointer"
-                          />
-                        </div>
-
-                        {/* Zoom Action buttons */}
-                        <div className="flex bg-neutral-950 rounded-lg border border-neutral-800 overflow-hidden">
-                          <button
-                            onClick={() => setMapZoom(prev => Math.min(2.5, prev + 0.2))}
-                            className="p-1 hover:bg-neutral-800 text-neutral-300 border-r border-neutral-800 cursor-pointer w-6 text-center text-xs font-bold"
-                            title="Zoom In"
-                          >
-                            +
-                          </button>
-                          <button
-                            onClick={() => setMapZoom(prev => Math.max(1.0, prev - 0.2))}
-                            className="p-1 hover:bg-neutral-800 text-neutral-300 border-r border-neutral-800 cursor-pointer w-6 text-center text-xs font-bold"
-                            title="Zoom Out"
-                          >
-                            -
-                          </button>
-                          <button
-                            onClick={() => {
-                              setMapZoom(1.0);
-                              setSearchRadius(5.0);
-                              setSelectedMatchId(null);
-                            }}
-                            className="p-1 hover:bg-neutral-800 text-neutral-400 cursor-pointer w-7 text-[10px] font-mono"
-                            title="Reset View"
-                          >
-                            Reset
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* SVG Mini Map Container */}
-                    <div className="w-full flex-1 relative min-h-[300px] bg-[#070707] rounded-2xl overflow-hidden border border-neutral-900">
-                      
-                      <svg viewBox="0 0 800 500" className="w-full h-full select-none">
-                        {/* Style injection for animations */}
-                        <style>{`
-                          @keyframes radar-sweep-embed {
-                            from { transform: rotate(0deg); }
-                            to { transform: rotate(360deg); }
-                          }
-                          .animate-radar-sweep-embed {
-                            transform-origin: 220px 340px;
-                            animation: radar-sweep-embed 10s linear infinite;
-                          }
-                          @keyframes pulse-ring-embed {
-                            0% { r: 50px; opacity: 0.5; }
-                            100% { r: 350px; opacity: 0; }
-                          }
-                          .animate-pulse-ring-embed {
-                            transform-origin: 220px 340px;
-                            animation: pulse-ring-embed 5s cubic-bezier(0.1, 0.4, 0.2, 1) infinite;
-                          }
-                          @keyframes dash-flow-embed {
-                            to {
-                              stroke-dashoffset: -20;
-                            }
-                          }
-                          .animate-dash-flow-embed {
-                            stroke-dasharray: 8, 4;
-                            animation: dash-flow-embed 1.2s linear infinite;
-                          }
-                          .node-transition {
-                            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-                          }
-                        `}</style>
-
-                        {/* Defs block */}
-                        <defs>
-                          <pattern id="grid-map-dusk-embed" width="30" height="30" patternUnits="userSpaceOnUse">
-                            <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#121212" strokeWidth="1" />
-                          </pattern>
-                          {/* Beautiful Neon Orange Glow filter */}
-                          <filter id="radar-glow" x="-20%" y="-20%" width="140%" height="140%">
-                            <feGaussianBlur stdDeviation="6" result="blur" />
-                            <feMerge>
-                              <feMergeNode in="blur" />
-                              <feMergeNode in="SourceGraphic" />
-                            </feMerge>
-                          </filter>
-                        </defs>
-                        <rect width="100%" height="100%" fill="url(#grid-map-dusk-embed)" />
-
-                        {/* Outer Zoomable Layer */}
-                        <g style={{ transform: `scale(${mapZoom})`, transformOrigin: '220px 340px' }} className="transition-transform duration-500">
-                          
-                          {/* Interactive Range Circle Limit visualization */}
-                          <circle cx="220" cy="340" r={searchRadius * 60} fill="none" stroke="#f97316" strokeWidth="1" strokeDasharray="3,6" className="opacity-15" />
-                          <text x="220" y={340 - (searchRadius * 60) - 5} fill="#f97316" fontSize="8" fontFamily="monospace" textAnchor="middle" className="opacity-30">
-                            {searchRadius} MILE BOUNDARY
-                          </text>
-
-                          {/* Radar Scan Rings */}
-                          <circle cx="220" cy="340" r="120" fill="none" stroke="#f97316" strokeWidth="0.5" strokeDasharray="4,4" className="opacity-20" />
-                          <circle cx="220" cy="340" r="240" fill="none" stroke="#f97316" strokeWidth="0.5" strokeDasharray="4,4" className="opacity-10" />
-
-                          {/* Live Sweeping Radar Scanner Overlay */}
-                          <circle cx="220" cy="340" r="1" fill="none" className="animate-pulse-ring-embed" stroke="#f97316" strokeWidth="1" />
-                          <line x1="220" y1="340" x2="220" y2="40" stroke="#f97316" strokeWidth="1.5" strokeOpacity="0.25" className="animate-radar-sweep-embed" />
-
-                          {/* Connection Lines (Matches) */}
-                          {(mapFilter === "all" || mapFilter === "matches") && matches.map(m => {
-                            const coords = m.id === "p-1" ? { x: 310, y: 180 } :
-                                           m.id === "p-2" ? { x: 480, y: 140 } :
-                                           m.id === "p-3" ? { x: 180, y: 240 } :
-                                           m.id === "p-4" ? { x: 560, y: 390 } :
-                                           { x: 350, y: 420 };
-                            const isActive = activeMatchCard && activeMatchCard.id === m.id;
-                            const distanceVal = parseFloat(m.distance) || 2.0;
-                            const isOutOfRange = distanceVal > searchRadius;
-
-                            if (isOutOfRange) return null;
-
-                            if (isActive) {
-                              const controlX = (220 + coords.x) / 2 + 30;
-                              const controlY = (340 + coords.y) / 2 - 30;
-                              return (
-                                <g key={`line-group-${m.id}`}>
-                                  {/* Deep glow layer */}
-                                  <path
-                                    d={`M 220 340 Q ${controlX} ${controlY} ${coords.x} ${coords.y}`}
-                                    fill="none"
-                                    stroke="#ea580c"
-                                    strokeWidth="5"
-                                    strokeOpacity="0.6"
-                                    filter="url(#radar-glow)"
-                                    className="animate-pulse duration-1000"
-                                  />
-                                  {/* Secondary sharp line with running pulse */}
-                                  <path
-                                    d={`M 220 340 Q ${controlX} ${controlY} ${coords.x} ${coords.y}`}
-                                    fill="none"
-                                    stroke="#ffedd5"
-                                    strokeWidth="2"
-                                    className="animate-dash-flow-embed"
-                                  />
-                                  {/* Pulsing travel point mid-way */}
-                                  <circle
-                                    cx={(220 + coords.x) / 2 + 15}
-                                    cy={(340 + coords.y) / 2 - 15}
-                                    r="6"
-                                    fill="#fff"
-                                    className="animate-ping"
-                                  />
-                                  <circle
-                                    cx={(220 + coords.x) / 2 + 15}
-                                    cy={(340 + coords.y) / 2 - 15}
-                                    r="3"
-                                    fill="#f97316"
-                                  />
-                                </g>
-                              );
-                            }
-
-                            return (
-                              <line
-                                key={`line-embed-${m.id}`}
-                                x1="220"
-                                y1="340"
-                                x2={coords.x}
-                                y2={coords.y}
-                                stroke="#1e1b4b"
-                                strokeWidth="0.75"
-                                strokeDasharray="3,3"
-                                className="opacity-40"
-                              />
-                            );
-                          })}
-
-                          {/* User Node */}
-                          <g>
-                            <circle cx="220" cy="340" r="16" fill="#ea580c" className="opacity-30 animate-ping" />
-                            <circle cx="220" cy="340" r="9" fill="#ea580c" stroke="#fff" strokeWidth="2" />
-                            <text x="220" y="368" fill="#fff" fontSize="10" fontWeight="bold" fontFamily="monospace" textAnchor="middle" className="tracking-wide">
-                              Alex (You)
-                            </text>
-                          </g>
-
-                          {/* Candidates/Singles Nodes */}
-                          {(mapFilter === "all" || mapFilter === "matches") && matches.map(m => {
-                            const coords = m.id === "p-1" ? { x: 310, y: 180 } :
-                                           m.id === "p-2" ? { x: 480, y: 140 } :
-                                           m.id === "p-3" ? { x: 180, y: 240 } :
-                                           m.id === "p-4" ? { x: 560, y: 390 } :
-                                           { x: 350, y: 420 };
-                            const isActive = activeMatchCard && activeMatchCard.id === m.id;
-                            const distanceVal = parseFloat(m.distance) || 2.0;
-                            const isOutOfRange = distanceVal > searchRadius;
-
-                            return (
-                              <g
-                                key={`pin-embed-${m.id}`}
-                                className="cursor-pointer group"
-                                onClick={() => {
-                                  if (!isOutOfRange) {
-                                    setSelectedMatchId(m.id);
-                                  }
-                                }}
-                                onMouseEnter={() => {
-                                  setHoveredNode({
-                                    id: m.id,
-                                    name: m.name,
-                                    type: "match",
-                                    x: coords.x,
-                                    y: coords.y,
-                                    detail: `${m.age} • ${m.location} (${m.distance})${isOutOfRange ? " • OUT OF RADIUS" : ""}`
-                                  });
-                                }}
-                                onMouseLeave={() => setHoveredNode(null)}
-                              >
-                                {/* Glow ring around active candidate */}
-                                {isActive && (
-                                  <circle
-                                    cx={coords.x}
-                                    cy={coords.y}
-                                    r="18"
-                                    fill="#ea580c"
-                                    className="opacity-30 animate-pulse"
-                                  />
-                                )}
-                                <circle
-                                  cx={coords.x}
-                                  cy={coords.y}
-                                  r={isActive ? "11" : "8"}
-                                  fill={isOutOfRange ? "#262626" : (isActive ? "#ea580c" : "#0f172a")}
-                                  stroke={isOutOfRange ? "#404040" : (isActive ? "#fff" : "#ea580c")}
-                                  strokeWidth="1.5"
-                                  className="node-transition hover:scale-125"
-                                />
-                                {/* Sparkly indicator dot for mutual interest match */}
-                                {!isOutOfRange && (
-                                  <circle
-                                    cx={coords.x + 5}
-                                    cy={coords.y - 5}
-                                    r="2.5"
-                                    fill="#10b981"
-                                    className="animate-ping"
-                                  />
-                                )}
-                                <text
-                                  x={coords.x}
-                                  y={coords.y - (isActive ? 18 : 14)}
-                                  fill={isOutOfRange ? "#525252" : (isActive ? "#f97316" : "#a3a3a3")}
-                                  fontSize="9"
-                                  fontWeight={isActive ? "bold" : "normal"}
-                                  fontFamily="monospace"
-                                  textAnchor="middle"
-                                >
-                                  {m.name} {isOutOfRange ? "⚠️" : `(${m.distance.replace(" away", "")})`}
-                                </text>
-                              </g>
-                            );
-                          })}
-
-                          {/* Curated Crew / Roundtable Nodes */}
-                          {(mapFilter === "all" || mapFilter === "crews") && [
-                            { id: "g-1", x: 130, y: 120, name: "Sunset Hiking Elite", emoji: "🏔️", cat: "Adventure" },
-                            { id: "g-2", x: 390, y: 100, name: "Late Night Vinyl & Espresso", emoji: "🎧", cat: "Arts" },
-                            { id: "g-3", x: 260, y: 280, name: "Gastronomy & Sunday Brunch", emoji: "🍲", cat: "Cuisine" },
-                            { id: "g-4", x: 620, y: 200, name: "Modern Boardgamers & Cocktails", emoji: "🎲", cat: "Games" },
-                            { id: "g-5", x: 500, y: 300, name: "Creative Think-Tank & Tonic", emoji: "💻", cat: "Tech" },
-                          ].map(g => {
-                            const isJoined = userProfile.joinedGroups.includes(g.id);
-                            return (
-                              <g
-                                key={`crew-embed-${g.id}`}
-                                className="cursor-pointer"
-                                onClick={() => {
-                                  setRoundtableSubTab("crews");
-                                  navigateToWorkspace("roundtable");
-                                  setActiveChatId(g.id); // jump directly to crew chat!
-                                }}
-                                onMouseEnter={() => {
-                                  setHoveredNode({
-                                    id: g.id,
-                                    name: g.name,
-                                    type: "crew",
-                                    x: g.x,
-                                    y: g.y,
-                                    detail: `Crew type: ${g.cat} • ${isJoined ? "Representing Inside ✓" : "Click to Join Roundtable Chat"}`
-                                  });
-                                }}
-                                onMouseLeave={() => setHoveredNode(null)}
-                              >
-                                {isJoined && (
-                                  <rect
-                                    x={g.x - 14}
-                                    y={g.y - 14}
-                                    width="28"
-                                    height="28"
-                                    rx="6"
-                                    fill="none"
-                                    stroke="#10b981"
-                                    strokeWidth="1"
-                                    className="opacity-40 animate-ping"
-                                  />
-                                )}
-                                <rect
-                                  x={g.x - 11}
-                                  y={g.y - 11}
-                                  width="22"
-                                  height="22"
-                                  rx="5"
-                                  fill="#022c22"
-                                  stroke={isJoined ? "#10b981" : "#059669"}
-                                  strokeWidth="1.5"
-                                  className="node-transition hover:rotate-12 hover:scale-125"
-                                />
-                                <text
-                                  x={g.x}
-                                  y={g.y + 4}
-                                  fontSize="10"
-                                  textAnchor="middle"
-                                >
-                                  {g.emoji}
-                                </text>
-                                <text
-                                  x={g.x}
-                                  y={g.y + 24}
-                                  fill="#10b981"
-                                  fontSize="8"
-                                  fontFamily="monospace"
-                                  fontWeight="bold"
-                                  textAnchor="middle"
-                                >
-                                  {g.name.split(" ")[0]} Crew
-                                </text>
-                              </g>
-                            );
-                          })}
-
-                        </g>
-                      </svg>
-
-                      {/* Absolute Hover Tooltip Card */}
-                      {hoveredNode && (
-                        <div
-                          style={{
-                            left: `${Math.min(75, Math.max(5, (hoveredNode.x / 800) * 100))}%`,
-                            top: `${Math.min(75, Math.max(5, (hoveredNode.y / 500) * 100 - 15))}%`
-                          }}
-                          className="absolute z-30 smoked-glass border border-orange-500/40 p-2.5 rounded-xl text-[10px] text-neutral-200 pointer-events-none max-w-[200px] shadow-2xl transition-all duration-150 animate-fade-in"
-                        >
-                          <div className="flex items-center gap-1.5 font-bold text-white uppercase font-mono tracking-wide">
-                            <span className={hoveredNode.type === "match" ? "text-orange-400" : "text-emerald-400"}>
-                              {hoveredNode.type === "match" ? "✦ Single" : "👥 Crew"}
-                            </span>
-                            <span>•</span>
-                            <span className="truncate">{hoveredNode.name}</span>
-                          </div>
-                          <p className="text-[9px] text-neutral-400 font-sans mt-1 leading-snug">
-                            {hoveredNode.detail}
-                          </p>
-                          <p className="text-[8px] text-orange-500 font-mono mt-1 text-right">
-                            {hoveredNode.type === "match" ? "Click to load stack ✓" : "Click to view chat ✓"}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Active Connection GPS route lock panel */}
-                      {activeMatchCard && (
-                        <div className="absolute bottom-4 right-4 z-10 smoked-glass p-3 rounded-2xl border border-orange-500/20 max-w-[220px] animate-fade-in text-xs">
-                          <div className="flex items-center gap-1 text-orange-400 font-bold mb-1">
-                            <Compass className="w-3.5 h-3.5 animate-spin-slow" />
-                            <span>Telemetry Lock</span>
-                          </div>
-                          <p className="text-white font-bold">{activeMatchCard.name}</p>
-                          <p className="text-[10px] text-neutral-400 font-mono mt-0.5 leading-relaxed">
-                            Distance: {activeMatchCard.distance}<br/>
-                            Est. Walk: ~{Math.round((parseFloat(activeMatchCard.distance) || 1.8) * 15)} mins<br/>
-                            Compatibility: <span className="text-orange-400 font-bold">{activeMatchCard.compatibilityScore}%</span>
-                          </p>
-                        </div>
-                      )}
-
-                    </div>
-
-                    {/* Distance footer */}
-                    <div className="flex items-center justify-between gap-3 bg-neutral-950 p-3 rounded-2xl border border-neutral-900 mt-3 text-xs text-neutral-400">
-                      <div className="flex items-center gap-2">
-                        <Info className="w-4 h-4 text-orange-500 shrink-0" />
-                        <p className="leading-snug">
-                          {activeMatchCard
-                            ? `Dusk located ${activeMatchCard.name} at ${activeMatchCard.location} (${activeMatchCard.distance}). Spark up a conversation to match coordinates.`
-                            : "Dusk radar is sweeping nearby zones. Modify your preferences or click Refresh Connections to search again."}
+                  <div className="flex min-h-[450px] flex-1 flex-col rounded-3xl border border-neutral-800 smoked-glass p-5">
+                    <div className="flex items-start gap-3 rounded-2xl border border-orange-900/40 bg-orange-950/10 p-4">
+                      <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-orange-400" />
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-bold text-white">Public-place safety lock</h4>
+                        <p className="text-[11px] leading-relaxed text-neutral-400">
+                          Vibe never maps a person's home, live position, or individual profile. A venue map opens only when the place is confirmed public, you have RSVP'd, and at least two people are attending.
                         </p>
                       </div>
                     </div>
+
+                    <div className="mt-4 space-y-3">
+                      {meetups.map(meetup => {
+                        const publicVenue = meetup.venueType === "public";
+                        const groupConfirmed = meetup.attendeesCount >= 2;
+                        const canOpenMap = privacySettings.shareLocation && publicVenue && meetup.joined && groupConfirmed;
+                        return (
+                          <div key={meetup.id} className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0 space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h5 className="truncate text-xs font-bold text-neutral-100">{meetup.title}</h5>
+                                  <span className={`rounded border px-2 py-0.5 font-mono text-[8px] ${publicVenue ? "border-emerald-900/50 bg-emerald-950/20 text-emerald-400" : "border-amber-900/50 bg-amber-950/20 text-amber-400"}`}>
+                                    {publicVenue ? "PUBLIC VENUE" : "UNVERIFIED — MAP BLOCKED"}
+                                  </span>
+                                </div>
+                                <p className="flex items-center gap-1.5 text-[10px] text-neutral-400">
+                                  <MapPin className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+                                  {publicVenue ? meetup.location : "Venue withheld until public-place verification"}
+                                </p>
+                                <p className="text-[9px] text-neutral-600">
+                                  {meetup.joined ? "RSVP confirmed" : "RSVP required"} • {meetup.attendeesCount} attending • minimum 2 required
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={!canOpenMap}
+                                onClick={() => canOpenMap && setSelectedMeetupForMap(meetup)}
+                                title={
+                                  canOpenMap
+                                    ? "Open confirmed public venue map"
+                                    : !privacySettings.shareLocation
+                                      ? "Enable Public meetup venue maps in Privacy"
+                                      : !publicVenue
+                                        ? "Venue must be verified as public"
+                                        : !meetup.joined
+                                          ? "RSVP before viewing the venue map"
+                                          : "At least two attendees are required"
+                                }
+                                className="shrink-0 rounded-xl bg-orange-600 px-4 py-2.5 text-[10px] font-bold text-white transition-colors hover:bg-orange-500 disabled:cursor-not-allowed disabled:bg-neutral-900 disabled:text-neutral-600"
+                              >
+                                {canOpenMap ? "Open public venue map" : "Map safety locked"}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => navigateToWorkspace("profile")}
+                      className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-3 text-[10px] font-bold text-neutral-300 transition-colors hover:bg-neutral-900 hover:text-white"
+                    >
+                      <ShieldCheck className="h-4 w-4 text-orange-400" /> Review public-venue map permission
+                    </button>
                   </div>
                 </div>
 
@@ -2039,6 +1668,11 @@ export default function App() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {filteredMeetups.length > 0 ? (
                     filteredMeetups.map(evt => {
+                      const canOpenPublicVenueMap =
+                        privacySettings.shareLocation &&
+                        evt.venueType === "public" &&
+                        evt.joined &&
+                        evt.attendeesCount >= 2;
                       return (
                         <div
                           key={evt.id}
@@ -2059,6 +1693,13 @@ export default function App() {
                                 </span>
                                 <span className="text-[9px] font-bold uppercase tracking-wider bg-neutral-950/80 backdrop-blur-md px-2 py-0.5 rounded border border-neutral-800 text-emerald-400">
                                   {evt.category}
+                                </span>
+                                <span className={`text-[9px] font-bold uppercase tracking-wider backdrop-blur-md px-2 py-0.5 rounded border ${
+                                  evt.venueType === "public"
+                                    ? "bg-emerald-950/80 border-emerald-900/60 text-emerald-300"
+                                    : "bg-amber-950/80 border-amber-900/60 text-amber-300"
+                                }`}>
+                                  {evt.venueType === "public" ? "Public venue" : "Map unverified"}
                                 </span>
                               </div>
                             </div>
@@ -2112,11 +1753,13 @@ export default function App() {
                             <div className="flex gap-2">
                               <button
                                 id={`btn-map-meetup-${evt.id}`}
-                                onClick={() => setSelectedMeetupForMap(evt)}
-                                className="flex-1 py-2 rounded-xl bg-neutral-950 hover:bg-neutral-900 text-[11px] font-bold text-neutral-300 border border-neutral-800 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                                disabled={!canOpenPublicVenueMap}
+                                onClick={() => canOpenPublicVenueMap && setSelectedMeetupForMap(evt)}
+                                title={canOpenPublicVenueMap ? "Open confirmed public venue map" : "Map requires permission, a public venue, your RSVP, and at least two attendees"}
+                                className="flex-1 py-2 rounded-xl bg-neutral-950 hover:bg-neutral-900 disabled:bg-neutral-950 disabled:text-neutral-700 disabled:cursor-not-allowed text-[11px] font-bold text-neutral-300 border border-neutral-800 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                               >
                                 <MapPin className="w-3.5 h-3.5 text-orange-400" />
-                                View Map
+                                {canOpenPublicVenueMap ? "Public Venue Map" : "Map Locked"}
                               </button>
                               <button
                                 id={`btn-invite-meetup-${evt.id}`}
@@ -2561,7 +2204,7 @@ export default function App() {
                 <div className="text-center sm:text-left space-y-1">
                   <h2 className="text-xl font-bold text-white font-display">{userProfile.name}, {userProfile.age}</h2>
                   <p className="text-xs text-neutral-400 font-mono">
-                    Location: {userProfile.location} • {privacySettings.shareLocation ? "visible" : "hidden from members"}
+                    Home and live location: never shared
                   </p>
                   
                   {/* Status pills selector */}
@@ -2671,8 +2314,8 @@ export default function App() {
                       onChange={enabled => updatePrivacySetting("profileDiscoverable", enabled)}
                     />
                     <PrivacyToggle
-                      label="Share profile location"
-                      description="Show your profile location to other members."
+                      label="Public meetup venue maps"
+                      description="Allow maps only for confirmed public venues after you RSVP and at least two people are attending."
                       enabled={privacySettings.shareLocation}
                       onChange={enabled => updatePrivacySetting("shareLocation", enabled)}
                     />
@@ -2874,11 +2517,11 @@ export default function App() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] uppercase text-neutral-400 font-semibold tracking-wider">Outing Venue Location Name</label>
+                <label className="text-[10px] uppercase text-neutral-400 font-semibold tracking-wider">Public Venue Name</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g., The Blue Room & Speakeasy Bar"
+                  placeholder="e.g., public café, museum, park, or staffed venue"
                   value={newEvent.location}
                   onChange={e => setNewEvent(prev => ({ ...prev, location: e.target.value }))}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-neutral-200 outline-none focus:border-orange-500"
@@ -2960,11 +2603,26 @@ export default function App() {
                 />
               </div>
 
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-orange-900/40 bg-orange-950/10 p-3">
+                <input
+                  type="checkbox"
+                  required
+                  checked={newEvent.publicVenueConfirmed}
+                  onChange={event => setNewEvent(prev => ({ ...prev, publicVenueConfirmed: event.target.checked }))}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-orange-600"
+                />
+                <span>
+                  <span className="block text-[10px] font-bold text-neutral-200">I confirm this is a public, staffed, or clearly public outdoor venue.</span>
+                  <span className="mt-0.5 block text-[9px] leading-relaxed text-neutral-500">Home addresses, hotel rooms, private studios, and live-person locations are not allowed. The map remains locked until RSVP and at least two attendees are confirmed.</span>
+                </span>
+              </label>
+
               <button
                 type="submit"
-                className="w-full py-3 bg-orange-600 hover:bg-orange-500 text-white font-semibold rounded-xl text-center leading-none mt-2 shadow shadow-orange-950/40 cursor-pointer"
+                disabled={!newEvent.title.trim() || !newEvent.location.trim() || !newEvent.publicVenueConfirmed}
+                className="w-full py-3 bg-orange-600 hover:bg-orange-500 disabled:bg-neutral-900 disabled:text-neutral-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl text-center leading-none mt-2 shadow shadow-orange-950/40 cursor-pointer"
               >
-                Publish Proposal to Board
+                Publish Public-Place Proposal
               </button>
 
             </form>
@@ -3179,7 +2837,6 @@ export default function App() {
           isOpen={true}
           onClose={() => setSelectedMeetupForMap(null)}
           meetup={selectedMeetupForMap}
-          matches={matches}
         />
       )}
 

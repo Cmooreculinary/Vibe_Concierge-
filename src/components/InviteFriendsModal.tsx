@@ -105,7 +105,7 @@ export default function InviteFriendsModal({
                         )}
                       </div>
                       <p className="text-[10px] text-neutral-400 truncate font-mono">
-                        {friend.distance} • {friend.location}
+                        Location protected • matched connection
                       </p>
                       {/* Mutual Interests tag list */}
                       <div className="flex gap-1 overflow-hidden">
